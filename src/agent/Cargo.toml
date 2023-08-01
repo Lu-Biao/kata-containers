@@ -81,6 +81,10 @@ tempfile = "3.1.0"
 test-utils = { path = "../libs/test-utils" }
 which = "4.3.0"
 
+[build-dependencies]
+anyhow = "1"
+ttrpc-codegen = { version = "0.4.2", optional = true }
+
 [workspace]
 resolver = "2"
 members = [
@@ -91,8 +95,10 @@ members = [
 lto = true
 
 [features]
+default = ["sealed-secret"]
 seccomp = ["rustjail/seccomp"]
 standard-oci-runtime = ["rustjail/standard-oci-runtime"]
+sealed-secret = ["ttrpc-codegen"]
 
 [[bin]]
 name = "kata-agent"

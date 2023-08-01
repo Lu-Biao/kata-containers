@@ -1,2 +1,4 @@
 tarpaulin-report.html
 vendor/
+src/sealed_secret.rs
+src/sealed_secret_ttrpc.rs
