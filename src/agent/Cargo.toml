@@ -91,8 +91,10 @@ members = [
 lto = true
 
 [features]
+default = ["sealed-secret"]
 seccomp = ["rustjail/seccomp"]
 standard-oci-runtime = ["rustjail/standard-oci-runtime"]
+sealed-secret = ["protocols/sealed-secret"]
 
 [[bin]]
 name = "kata-agent"
