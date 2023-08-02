@@ -52,6 +52,8 @@ mod uevent;
 mod util;
 mod version;
 mod watcher;
+#[cfg(feature = "sealed-secret")]
+mod sealed_secret;
 
 use mount::{cgroups_mount, general_mount};
 use sandbox::Sandbox;
