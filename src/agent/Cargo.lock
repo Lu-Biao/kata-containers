@@ -2051,6 +2051,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "cgroups-rs",
  "clap",
+ "derivative",
  "futures",
  "image-rs",
  "ipnetwork",
