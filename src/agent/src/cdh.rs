@@ -4,10 +4,23 @@
 //
 
 use anyhow::{anyhow, Result};
+use oci::{Mount, Spec};
 use protocols::{
     sealed_secret, sealed_secret_ttrpc_async, sealed_secret_ttrpc_async::SealedSecretServiceClient,
 };
+use std::fs;
+use std::fs::File;
+use std::io::{Read, Write};
+use std::os::unix::fs::symlink;
+use std::path::Path;
 const CDH_ADDR: &str = "unix:///run/confidential-containers/cdh.sock";
+const SECRETS_DIR: &str = "/run/secrets/";
+const SEALED_SECRET_TIMEOUT: i64 = 50 * 1000 * 1000 * 1000;
+
+// Convenience function to obtain the scope logger.
+fn sl() -> slog::Logger {
+    slog_scope::logger()
+}
 
 #[derive(Clone)]
 pub struct CDHClient {
@@ -34,22 +47,18 @@ impl CDHClient {
         input.set_secret(secret.into());
         let unseal = self
             .sealed_secret_client
-            .unseal_secret(
-                ttrpc::context::with_timeout(50 * 1000 * 1000 * 1000),
-                &input,
-            )
+            .unseal_secret(ttrpc::context::with_timeout(SEALED_SECRET_TIMEOUT), &input)
             .await?;
         Ok(unseal)
     }
 
     pub async fn unseal_env(&self, env: &str) -> Result<String> {
-        let (key, value) = env.split_once('=').unwrap();
+        let (key, value) = env.split_once('=').unwrap_or(("", ""));
         if value.starts_with("sealed.") {
             let unsealed_value = self.unseal_secret_async(value).await;
             match unsealed_value {
                 Ok(v) => {
-                    let plain_env =
-                        format!("{}={}", key, std::str::from_utf8(&v.plaintext).unwrap());
+                    let plain_env = format!("{}={}", key, std::str::from_utf8(&v.plaintext)?);
                     return Ok(plain_env);
                 }
                 Err(e) => {
@@ -58,6 +67,90 @@ impl CDHClient {
             };
         }
         Ok((*env.to_owned()).to_string())
+    }
+
+    pub async fn unseal_file(&self, sealed_source_path: &String) -> Result<()> {
+        if !Path::new(sealed_source_path).exists() {
+            info!(
+                sl(),
+                "sealed mount source: {:?} not exists", sealed_source_path
+            );
+            return Ok(());
+        }
+
+        for entry in fs::read_dir(sealed_source_path)? {
+            let entry = entry?;
+
+            if !entry.file_type()?.is_symlink()
+                && !fs::metadata(entry.path())?.file_type().is_file()
+            {
+                info!(
+                    sl(),
+                    "skip sealed source entry: {:?} file type: {:?}",
+                    entry,
+                    entry.file_type()?
+                );
+                continue;
+            }
+
+            let target_path = fs::canonicalize(&entry.path())?;
+            info!(sl(), "sealed source entry target path: {:?}", target_path);
+            if !target_path.is_file() {
+                info!(
+                    sl(),
+                    "sealed source entry target path not file: {:?}", target_path
+                );
+                continue;
+            }
+
+            let secret_name = entry.file_name();
+            let mut file = fs::File::open(&target_path)?;
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
+            if contents.starts_with("sealed.") {
+                info!(
+                    sl(),
+                    "sealed source entry target path found : {:?}", target_path
+                );
+                let unsealed_filename = SECRETS_DIR.to_string()
+                    + secret_name
+                        .as_os_str()
+                        .to_str()
+                        .ok_or(anyhow!("create unsealed_filename failed"))?;
+                let unsealed_value = self.unseal_secret_async(&contents).await?;
+                let mut unsealed_file = File::create(&unsealed_filename)?;
+                unsealed_file.write_all(&unsealed_value.plaintext)?;
+                fs::remove_file(&entry.path())?;
+                symlink(unsealed_filename, &entry.path())?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn create_sealed_secret_mounts(&self, spec: &mut Spec) -> Result<Vec<String>> {
+        let mut sealed_source_path: Vec<String> = vec![];
+        for m in spec.mounts.iter_mut() {
+            if let Some(unsealed_mount_point) = m.destination.strip_prefix("/sealed") {
+                info!(
+                    sl(),
+                    "sealed mount destination: {:?} source: {:?}", m.destination, m.source
+                );
+                sealed_source_path.push(m.source.clone());
+                m.destination = unsealed_mount_point.to_string();
+            }
+        }
+
+        if sealed_source_path.len() > 0 {
+            let sealed_mounts = Mount {
+                destination: SECRETS_DIR.to_string(),
+                r#type: "bind".to_string(),
+                source: SECRETS_DIR.to_string(),
+                options: vec!["bind".to_string()],
+            };
+            spec.mounts.push(sealed_mounts);
+        }
+        fs::create_dir_all(SECRETS_DIR)?;
+        Ok(sealed_source_path)
     }
 } /* end of impl CDHClient */
 
@@ -141,5 +234,6 @@ mod tests {
         assert_eq!(unchanged_env, String::from("key=testdata"));
 
         rt.shutdown_background();
+        std::thread::sleep(std::time::Duration::from_secs(2));
     }
 }
