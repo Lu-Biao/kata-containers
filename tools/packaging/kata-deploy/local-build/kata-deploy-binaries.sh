@@ -226,6 +226,7 @@ install_cc_image() {
 	export AA_KBC="${AA_KBC:-offline_fs_kbc}"
 	export KATA_BUILD_CC=yes
 	export MEASURED_ROOTFS=yes
+	export SEALED_SECRET=yes
 	variant="${1:-}"
 
 	install_image "${variant}"
