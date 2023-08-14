@@ -61,6 +61,10 @@ const ERR_INVALID_CONTAINER_PIPE_SIZE_PARAM: &str = "unable to parse container p
 const ERR_INVALID_CONTAINER_PIPE_SIZE_KEY: &str = "invalid container pipe size key name";
 const ERR_INVALID_CONTAINER_PIPE_NEGATIVE: &str = "container pipe size should not be negative";
 
+// parameter file
+#[cfg(feature = "confidential-data-hub")]
+const FILE_PARAMETERS_KBS_HOST: &str = "/run/confidential-containers/parameters/kbs_host";
+
 #[derive(Debug, Default, Deserialize)]
 pub struct EndpointsConfig {
     pub allowed: Vec<String>,
@@ -406,6 +410,9 @@ impl AgentConfig {
             config.endpoints.all_allowed = true;
         }
 
+        #[cfg(feature = "confidential-data-hub")]
+        Self::save_kbs_uri(&config.aa_kbc_params, FILE_PARAMETERS_KBS_HOST)?;
+
         Ok(config)
     }
 
@@ -418,6 +425,40 @@ impl AgentConfig {
 
     pub fn is_allowed_endpoint(&self, ep: &str) -> bool {
         self.endpoints.all_allowed || self.endpoints.allowed.contains(ep)
+    }
+
+    #[cfg(feature = "confidential-data-hub")]
+    fn save_kbs_uri(aa_kbc_params: &str, kbs_host_file: &str) -> Result<()> {
+        use anyhow::anyhow;
+        use std::io::Write;
+
+        if let Some((_kbc_name, kbs_uri)) = aa_kbc_params.split_once("::") {
+            if kbs_uri.is_empty() {
+                bail!("missing KBS URI");
+            }
+            if let Some(parent_dir) = std::path::Path::new(kbs_host_file).parent() {
+                fs::create_dir_all(parent_dir)
+                    .map_err(|e| anyhow!("failed to create kbs_host_file dir:{:?}", e))?;
+            } else {
+                bail!(
+                    "failed to get parent dir from kbs_host_file:{}",
+                    kbs_host_file
+                );
+            }
+            let mut file = fs::File::create(kbs_host_file)
+                .map_err(|e| anyhow!("fail to create kbs_host_file:{}, {:?}", kbs_host_file, e))?;
+            file.write_all(kbs_uri.as_bytes()).map_err(|e| {
+                anyhow!(
+                    "failed to write kbs_uri:{} to kbs_host_file:{}, {:?}",
+                    kbs_uri,
+                    kbs_host_file,
+                    e
+                )
+            })?;
+        } else {
+            bail!("failed to parse aa_kbc_params");
+        }
+        Ok(())
     }
 }
 
@@ -1726,5 +1767,66 @@ Caused by:
                 .collect()
         );
         assert!(!config.endpoints.all_allowed);
+    }
+
+    #[test]
+    #[cfg(feature = "confidential-data-hub")]
+    fn test_save_kbs_uri() {
+        use std::io::Read;
+
+        #[derive(Debug)]
+        struct TestData<'a> {
+            aa_kbc_params: &'a str,
+            kbs_uri: &'a str,
+            result_is_ok: bool,
+        }
+
+        let tests = &[
+            TestData {
+                aa_kbc_params: "",
+                kbs_uri: "",
+                result_is_ok: false,
+            },
+            TestData {
+                aa_kbc_params: "cc_kbc",
+                kbs_uri: "",
+                result_is_ok: false,
+            },
+            TestData {
+                aa_kbc_params: "::",
+                kbs_uri: "",
+                result_is_ok: false,
+            },
+            TestData {
+                aa_kbc_params: "cc_kbc::",
+                kbs_uri: "",
+                result_is_ok: false,
+            },
+            TestData {
+                aa_kbc_params: "cc_kbc::http://10.0.0.1:60000",
+                kbs_uri: "http://10.0.0.1:60000",
+                result_is_ok: true,
+            },
+        ];
+
+        for (i, d) in tests.iter().enumerate() {
+            let msg = format!("test[{}]: {:?}", i, d);
+            let dir = tempdir().expect("failed to create tmpdir");
+            let kbs_host_file = dir.path().join("test/kbs_host");
+            let result = AgentConfig::save_kbs_uri(
+                d.aa_kbc_params,
+                kbs_host_file.as_path().to_str().unwrap(),
+            );
+            let msg = format!("{}: result: {:?}", msg, result);
+            assert_eq!(d.result_is_ok, result.is_ok(), "{}", msg);
+            if d.result_is_ok != true {
+                continue;
+            }
+            let mut file = File::open(kbs_host_file).expect("failed to open kbs_host_file");
+            let mut kbs_uri = String::new();
+            file.read_to_string(&mut kbs_uri)
+                .expect("failed to read kbs_host_file");
+            assert_eq!(d.kbs_uri, &kbs_uri, "{}", msg);
+        }
     }
 }
