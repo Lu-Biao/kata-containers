@@ -24,6 +24,7 @@ serial_test = "0.5.1"
 kata-sys-util = { path = "../libs/kata-sys-util" }
 kata-types = { path = "../libs/kata-types" }
 url = "2.2.2"
+derivative = "2.2.0"
 
 # Async helpers
 async-trait = "0.1.42"
@@ -92,7 +93,9 @@ members = [
 lto = true
 
 [features]
+confidential-data-hub = []
 seccomp = ["rustjail/seccomp"]
+sealed-secret = ["protocols/sealed-secret", "confidential-data-hub"]
 standard-oci-runtime = ["rustjail/standard-oci-runtime"]
 
 [[bin]]
