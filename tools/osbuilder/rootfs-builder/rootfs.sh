@@ -696,6 +696,10 @@ EOF
 		( [ "${AA_KBC}" == "eaa_kbc" ] || [ "${AA_KBC}" == "cc_kbc_tdx" ] ) && [ "${ARCH}" == "x86_64" ] && LIBC="gnu"
 		make KBC=${AA_KBC} ttrpc=true && make install DESTDIR="${ROOTFS_DIR}/usr/local/bin/"
 		popd
+
+		pushd guest-components/confidential-data-hub
+		make && make install DESTDIR="${ROOTFS_DIR}/usr/local/bin/"
+		popd
 	fi
 
 	if [ "${KATA_BUILD_CC}" == "yes" ]; then
