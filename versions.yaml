@@ -199,8 +199,8 @@ externals:
 
   attestation-agent:
     description: "Provide attested key unwrapping for image decryption"
-    url: "https://github.com/Xynnn007/guest-components.git"
-    version: "feat-cdh-binary"
+    url: "https://github.com/confidential-containers/guest-components/"
+    version: "v0.7.0"
 
   cni-plugins:
     description: "CNI network plugins"

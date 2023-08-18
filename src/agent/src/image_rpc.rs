@@ -8,7 +8,7 @@
 use std::env;
 use std::fs;
 use std::path::Path;
-//use std::process::Command;
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 
@@ -25,12 +25,12 @@ use crate::AGENT_CONFIG;
 use image_rs::image::ImageClient;
 use std::io::Write;
 
-//const AA_PATH: &str = "/usr/local/bin/attestation-agent";
+const AA_PATH: &str = "/usr/local/bin/attestation-agent";
 
 const AA_KEYPROVIDER_URI: &str =
     "unix:///run/confidential-containers/attestation-agent/keyprovider.sock";
-//const AA_GETRESOURCE_URI: &str =
-    //"unix:///run/confidential-containers/attestation-agent/getresource.sock";
+const AA_GETRESOURCE_URI: &str =
+    "unix:///run/confidential-containers/attestation-agent/getresource.sock";
 
 const OCICRYPT_CONFIG_PATH: &str = "/tmp/ocicrypt_config.json";
 // kata rootfs is readonly, use tmpfs before CC storage is implemented.
