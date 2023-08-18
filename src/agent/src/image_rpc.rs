@@ -123,13 +123,12 @@ impl ImageService {
         config_file.write_all(ocicrypt_config.to_string().as_bytes())?;
 
         // The Attestation Agent will run for the duration of the guest.
-        //Command::new(AA_PATH)
-            //.arg("--keyprovider_sock")
-            //.arg(AA_KEYPROVIDER_URI)
-            //.arg("--getresource_sock")
-            //.arg(AA_GETRESOURCE_URI)
-            //.spawn()?;
-
+        Command::new(AA_PATH)
+            .arg("--keyprovider_sock")
+            .arg(AA_KEYPROVIDER_URI)
+            .arg("--getresource_sock")
+            .arg(AA_GETRESOURCE_URI)
+            .spawn()?;
         Ok(())
     }
 
