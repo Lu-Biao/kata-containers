@@ -39,11 +39,11 @@ impl CDHClient {
     pub async fn unseal_secret_async(
         &self,
         sealed: &str,
-    ) -> Result<sealed_secret::UnSealSecretOutput> {
+    ) -> Result<sealed_secret::UnsealSecretOutput> {
         let secret = sealed
             .strip_prefix("sealed.")
             .ok_or(anyhow!("strip_prefix sealed. failed"))?;
-        let mut input = sealed_secret::UnSealSecretInput::new();
+        let mut input = sealed_secret::UnsealSecretInput::new();
         input.set_secret(secret.into());
         let unseal = self
             .sealed_secret_client
@@ -177,9 +177,9 @@ mod tests {
         async fn unseal_secret(
             &self,
             _ctx: &::ttrpc::asynchronous::TtrpcContext,
-            _req: sealed_secret::UnSealSecretInput,
-        ) -> ttrpc::error::Result<sealed_secret::UnSealSecretOutput> {
-            let mut output = sealed_secret::UnSealSecretOutput::new();
+            _req: sealed_secret::UnsealSecretInput,
+        ) -> ttrpc::error::Result<sealed_secret::UnsealSecretOutput> {
+            let mut output = sealed_secret::UnsealSecretOutput::new();
             output.set_plaintext("unsealed".into());
             Ok(output)
         }
