@@ -28,7 +28,7 @@ LIBC=${LIBC:-musl}
 # However, it is not enforced by default: you need to enable that in the main configuration file.
 SECCOMP=${SECCOMP:-"yes"}
 # The kata agent enables sealed-secret feature.
-SEALED_SECRET=${SEALED_SECRET:-"no"}
+SEALED_SECRET=${SEALED_SECRET:-"yes"}
 SELINUX=${SELINUX:-"no"}
 
 lib_file="${script_dir}/../scripts/lib.sh"
