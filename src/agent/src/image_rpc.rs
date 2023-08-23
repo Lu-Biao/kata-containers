@@ -8,7 +8,7 @@
 use std::env;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
+//use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 
@@ -25,16 +25,16 @@ use crate::AGENT_CONFIG;
 use image_rs::image::ImageClient;
 use std::io::Write;
 
-const AA_PATH: &str = "/usr/local/bin/attestation-agent";
+//const AA_PATH: &str = "/usr/local/bin/attestation-agent";
 
 const AA_KEYPROVIDER_URI: &str =
     "unix:///run/confidential-containers/attestation-agent/keyprovider.sock";
-const AA_GETRESOURCE_URI: &str =
-    "unix:///run/confidential-containers/attestation-agent/getresource.sock";
+//const AA_GETRESOURCE_URI: &str =
+    //"unix:///run/confidential-containers/attestation-agent/getresource.sock";
 
-const AA_ATTESTATION_SOCKET: &str =
-    "/run/confidential-containers/attestation-agent/attestation-agent.sock";
-const CDH_PATH: &str = "/usr/local/bin/confidential-data-hub";
+//const AA_ATTESTATION_SOCKET: &str =
+    //"/run/confidential-containers/attestation-agent/attestation-agent.sock";
+//const CDH_PATH: &str = "/usr/local/bin/confidential-data-hub";
 
 const OCICRYPT_CONFIG_PATH: &str = "/tmp/ocicrypt_config.json";
 // kata rootfs is readonly, use tmpfs before CC storage is implemented.
@@ -126,30 +126,6 @@ impl ImageService {
         let mut config_file = fs::File::create(config_path)?;
         config_file.write_all(ocicrypt_config.to_string().as_bytes())?;
 
-        let path = Path::new(AA_ATTESTATION_SOCKET);
-        if path.exists() {
-            std::fs::remove_file(AA_ATTESTATION_SOCKET)?;
-        }
-
-        // The Attestation Agent will run for the duration of the guest.
-        Command::new(AA_PATH)
-            .arg("--keyprovider_sock")
-            .arg(AA_KEYPROVIDER_URI)
-            .arg("--getresource_sock")
-            .arg(AA_GETRESOURCE_URI)
-            .spawn()?;
-
-        // wait attestation-agent boot
-        for _ in 0..10 {
-            if path.exists() {
-                break;
-            }
-            info!(sl(), "LUB waiting for attestation-agent boot ...");
-            std::thread::sleep(std::time::Duration::from_secs(1));
-        }
-
-        info!(sl(), "LUB launch CDH: {}", CDH_PATH);
-        Command::new(CDH_PATH).spawn()?;
 
         Ok(())
     }

@@ -303,6 +303,66 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     rt.block_on(real_main())
 }
 
+const AA_PATH: &str = "/usr/local/bin/attestation-agent";
+
+const AA_KEYPROVIDER_URI: &str =
+    "unix:///run/confidential-containers/attestation-agent/keyprovider.sock";
+const AA_GETRESOURCE_URI: &str =
+    "unix:///run/confidential-containers/attestation-agent/getresource.sock";
+
+const AA_ATTESTATION_SOCKET: &str =
+    "/run/confidential-containers/attestation-agent/attestation-agent.sock";
+
+const CDH_PATH: &str = "/usr/local/bin/confidential-data-hub";
+const CDH_SOCKET: &str =
+    "/run/confidential-containers/cdh.sock";
+
+fn start_chd(logger: &Logger) -> Result<()> {
+
+    // launch AA
+    let path = std::path::Path::new(AA_ATTESTATION_SOCKET);
+    if path.exists() {
+        std::fs::remove_file(AA_ATTESTATION_SOCKET)?;
+    }
+
+    // The Attestation Agent will run for the duration of the guest.
+    std::process::Command::new(AA_PATH)
+        .arg("--keyprovider_sock")
+        .arg(AA_KEYPROVIDER_URI)
+        .arg("--getresource_sock")
+        .arg(AA_GETRESOURCE_URI)
+        .spawn()?;
+
+    // wait attestation-agent boot
+    for _ in 0..10 {
+        if path.exists() {
+            break;
+        }
+        info!(logger, "LUB waiting for attestation-agent boot ...");
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    // launch CDH
+    let cdh_socket = std::path::Path::new(CDH_SOCKET);
+    if cdh_socket.exists() {
+        std::fs::remove_file(CDH_SOCKET)?;
+    }
+
+    info!(logger, "LUB launch CDH: {}", CDH_PATH);
+    std::process::Command::new(CDH_PATH).spawn()?;
+
+    // wait CDH boot
+    for _ in 0..10 {
+        if cdh_socket.exists() {
+            break;
+        }
+        info!(logger, "LUB waiting for CDH boot ...");
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    Ok(())
+}
+
 #[instrument]
 async fn start_sandbox(
     logger: &Logger,
@@ -345,6 +405,8 @@ async fn start_sandbox(
 
     let (tx, rx) = tokio::sync::oneshot::channel();
     sandbox.lock().await.sender = Some(tx);
+
+    start_chd(&logger)?;
 
     // vsock:///dev/vsock, port
     let mut server = rpc::start(sandbox.clone(), config.server_addr.as_str(), init_mode).await?;
