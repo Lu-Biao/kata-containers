@@ -209,28 +209,6 @@ impl AgentService {
         // cannot predict everything from the caller.
         add_devices(&req.devices, &mut oci, &self.sandbox).await?;
 
-        #[cfg(feature = "sealed-secret")]
-        let mut sealed_source_path = {
-            let process = oci
-                .process
-                .as_mut()
-                .ok_or_else(|| anyhow!("Spec didn't contain process field"))?;
-
-            let client = self
-                .cdh_client
-                .as_ref()
-                .ok_or(anyhow!("get cdh_client failed"))?;
-            for env in process.env.iter_mut() {
-                let unsealed_env = client
-                    .unseal_env(env)
-                    .await
-                    .map_err(|e| anyhow!("unseal env failed: {:?}", e))?;
-                *env = unsealed_env.to_string();
-            }
-
-            client.create_sealed_secret_mounts(&mut oci)?
-        };
-
         let linux = oci
             .linux
             .as_mut()
@@ -275,6 +253,35 @@ impl AgentService {
         // Append guest hooks
         append_guest_hooks(&s, &mut oci)?;
 
+        #[cfg(feature = "sealed-secret")]
+        {
+            let client = self
+                .cdh_client
+                .as_ref()
+                .ok_or(anyhow!("get cdh_client failed"))?;
+
+            let mut sealed_source_path = {
+                let process = oci
+                    .process
+                    .as_mut()
+                    .ok_or_else(|| anyhow!("Spec didn't contain process field"))?;
+
+                for env in process.env.iter_mut() {
+                    let unsealed_env = client
+                        .unseal_env(env)
+                        .await
+                        .map_err(|e| anyhow!("unseal env failed: {:?}", e))?;
+                    *env = unsealed_env.to_string();
+                }
+
+                client.create_sealed_secret_mounts(&mut oci)?
+            };
+
+            for source_path in sealed_source_path.iter_mut() {
+                client.unseal_file(source_path).await?;
+            }
+        }
+
         // write spec to bundle path, hooks might
         // read ocispec
         let olddir = setup_bundle(&cid, &mut oci)?;
@@ -313,17 +320,6 @@ impl AgentService {
             info!(sl(), "no process configurations!");
             return Err(anyhow!(nix::Error::EINVAL));
         };
-
-        #[cfg(feature = "sealed-secret")]
-        {
-            let client = self
-                .cdh_client
-                .as_ref()
-                .ok_or(anyhow!("get cdh_client failed"))?;
-            for source_path in sealed_source_path.iter_mut() {
-                client.unseal_file(source_path).await?;
-            }
-        }
 
         // if starting container failed, we will do some rollback work
         // to ensure no resources are leaked.
