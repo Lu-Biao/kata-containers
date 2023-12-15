@@ -10,7 +10,7 @@
 use anyhow::{anyhow, Result};
 use oci::{Mount, Spec};
 use protocols::{
-    sealed_secret, sealed_secret_ttrpc_async, sealed_secret_ttrpc_async::SealedSecretServiceClient,
+    sealed_secret, sealed_secret_ttrpc_async::SealedSecretServiceClient,
 };
 use std::fs;
 use std::os::unix::fs::symlink;
@@ -26,23 +26,11 @@ fn sl() -> slog::Logger {
 
 #[derive(Clone)]
 pub struct CDHClient {
-    sealed_secret_client: Option<SealedSecretServiceClient>,
 }
 
 impl CDHClient {
     pub fn new() -> Result<Self> {
-        let c = ttrpc::asynchronous::Client::connect(CDH_ADDR);
-        match c {
-            Ok(v) => {
-                let ssclient = sealed_secret_ttrpc_async::SealedSecretServiceClient::new(v);
-                Ok(CDHClient {
-                    sealed_secret_client: Some(ssclient),
-                })
-            }
-            Err(_) => Ok(CDHClient {
-                sealed_secret_client: None,
-            }),
-        }
+        Ok(CDHClient{})
     }
 
     pub async fn unseal_secret_async(
@@ -54,12 +42,23 @@ impl CDHClient {
             .ok_or(anyhow!("strip_prefix \"sealed.\" failed"))?;
         let mut input = sealed_secret::UnsealSecretInput::new();
         input.set_secret(secret.into());
-        let unseal = self
-            .sealed_secret_client
-            .as_ref()
-            .ok_or(anyhow!("unwrap sealed_secret_client failed"))?
+
+        let mut i = 0;
+        let client = loop {
+                if let Ok(c) = ttrpc::asynchronous::Client::connect(CDH_ADDR) {
+                    break SealedSecretServiceClient::new(c);
+                }
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                i = i + 1;
+                if i > 10 {
+                    return Err(anyhow!("connect CDH failed"));
+                }
+            };
+
+        let unseal = client
             .unseal_secret(ttrpc::context::with_timeout(SEALED_SECRET_TIMEOUT), &input)
             .await?;
+
         Ok(unseal)
     }
 
